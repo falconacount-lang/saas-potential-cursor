@@ -117,6 +117,18 @@ try {
                 require_once __DIR__ . '/api/test.php';
                 break;
                 
+            // Database fix endpoint
+            case $apiPath === '/fix-database.php' || strpos($apiPath, '/fix-database.php/') === 0 || 
+                 $apiPath === '/fix-database' || strpos($apiPath, '/fix-database/') === 0:
+                require_once __DIR__ . '/api/fix-database.php';
+                break;
+                
+            // Admin setup endpoint
+            case $apiPath === '/setup-admin.php' || strpos($apiPath, '/setup-admin.php/') === 0 || 
+                 $apiPath === '/setup-admin' || strpos($apiPath, '/setup-admin/') === 0:
+                require_once __DIR__ . '/setup-admin.php';
+                break;
+                
             // AI endpoints
             case strpos($apiPath, '/ai/') === 0:
                 $aiPath = substr($apiPath, 4); // Remove '/ai/' prefix
