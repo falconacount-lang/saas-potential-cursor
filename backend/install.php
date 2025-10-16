@@ -76,7 +76,7 @@ try {
     
     // Choose schema file based on database driver
     if ($driver === 'sqlite') {
-        $schemaFile = __DIR__ . '/database/simple_schema.sql';
+        $schemaFile = __DIR__ . '/database/complete_schema.sql';
     } else {
         $schemaFile = __DIR__ . '/database/hostinger_mysql_schema.sql';
     }
