@@ -846,3 +846,8 @@ export const adminApi = {
 };
 
 export { AdminApiError };
+
+// Export the request function as apiRequest for backward compatibility
+export const apiRequest = request;
+
+export default adminApi;
