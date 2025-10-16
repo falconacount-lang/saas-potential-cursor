@@ -19,6 +19,14 @@ class Auth {
     }
     
     /**
+     * Get database-specific datetime function
+     */
+    private function getDateTimeFunction() {
+        $driver = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME);
+        return $driver === 'sqlite' ? "datetime('now')" : "NOW()";
+    }
+    
+    /**
      * Generate JWT token
      */
     private function generateJWT($payload) {
@@ -110,7 +118,7 @@ class Auth {
             // Insert user
             $stmt = $this->db->prepare("
                 INSERT INTO users (email, password, name, role, verification_token, created_at) 
-                VALUES (?, ?, ?, ?, ?, NOW())
+                VALUES (?, ?, ?, ?, ?, " . $this->getDateTimeFunction() . ")
             ");
             
             $stmt->execute([$email, $hashedPassword, $name, $role, $verificationToken]);
@@ -119,7 +127,7 @@ class Auth {
             // Create user profile
             $stmt = $this->db->prepare("
                 INSERT INTO user_profiles (user_id, preferences, created_at) 
-                VALUES (?, ?, NOW())
+                VALUES (?, ?, " . $this->getDateTimeFunction() . ")
             ");
             
             $defaultPreferences = json_encode([
@@ -213,7 +221,7 @@ class Auth {
             // For now, we'll skip session storage and rely on JWT validation
             
             // Update last login
-            $stmt = $this->db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+            $stmt = $this->db->prepare("UPDATE users SET last_login = " . $this->getDateTimeFunction() . " WHERE id = ?");
             $stmt->execute([$user['id']]);
             
             // Log activity
@@ -370,7 +378,7 @@ class Auth {
             $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT, ['cost' => BCRYPT_COST]);
             
             // Update password
-            $stmt = $this->db->prepare("UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?");
+            $stmt = $this->db->prepare("UPDATE users SET password = ?, updated_at = " . $this->getDateTimeFunction() . " WHERE id = ?");
             $stmt->execute([$hashedPassword, $userId]);
             
             // Invalidate all sessions except current one
@@ -418,7 +426,7 @@ class Auth {
             // Update user with reset token
             $stmt = $this->db->prepare("
                 UPDATE users 
-                SET reset_token = ?, reset_expires = ?, updated_at = NOW() 
+                SET reset_token = ?, reset_expires = ?, updated_at = " . $this->getDateTimeFunction() . " 
                 WHERE id = ?
             ");
             
@@ -453,7 +461,7 @@ class Auth {
             // Find user with valid reset token
             $stmt = $this->db->prepare("
                 SELECT id FROM users 
-                WHERE reset_token = ? AND reset_expires > NOW() AND status = 'active'
+                WHERE reset_token = ? AND reset_expires > " . $this->getDateTimeFunction() . " AND status = 'active'
             ");
             
             $stmt->execute([$token]);
@@ -480,7 +488,7 @@ class Auth {
             // Update password and clear reset token
             $stmt = $this->db->prepare("
                 UPDATE users 
-                SET password = ?, reset_token = NULL, reset_expires = NULL, updated_at = NOW() 
+                SET password = ?, reset_token = NULL, reset_expires = NULL, updated_at = " . $this->getDateTimeFunction() . " 
                 WHERE id = ?
             ");
             
@@ -510,15 +518,29 @@ class Auth {
      * Increment login attempts
      */
     private function incrementLoginAttempts($userId) {
-        $stmt = $this->db->prepare("
-            UPDATE users 
-            SET login_attempts = login_attempts + 1,
-                locked_until = CASE 
-                    WHEN login_attempts >= 4 THEN DATE_ADD(NOW(), INTERVAL 30 MINUTE)
-                    ELSE locked_until 
+        $driver = $this->db->getAttribute(PDO::ATTR_DRIVER_NAME);
+        
+        if ($driver === 'sqlite') {
+            $stmt = $this->db->prepare("
+                UPDATE users 
+                SET login_attempts = login_attempts + 1,
+                    locked_until = CASE 
+                        WHEN login_attempts >= 4 THEN datetime('now', '+30 minutes')
+                        ELSE locked_until 
+                    END
+                WHERE id = ?
+            ");
+        } else {
+            $stmt = $this->db->prepare("
+                UPDATE users 
+                SET login_attempts = login_attempts + 1,
+                    locked_until = CASE 
+                        WHEN login_attempts >= 4 THEN DATE_ADD(NOW(), INTERVAL 30 MINUTE)
+                        ELSE locked_until 
                 END
-            WHERE id = ?
-        ");
+                WHERE id = ?
+            ");
+        }
         
         $stmt->execute([$userId]);
     }
@@ -543,7 +565,7 @@ class Auth {
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO activity_logs (user_id, action, entity, entity_id, description, changes, ip_address, user_agent, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, " . $this->getDateTimeFunction() . ")
             ");
             
             $stmt->execute([
