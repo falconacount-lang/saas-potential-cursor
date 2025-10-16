@@ -24,19 +24,8 @@ define('BCRYPT_COST', 12);
 define('RATE_LIMIT_REQUESTS', 100);
 define('RATE_LIMIT_WINDOW', 3600); // 1 hour
 
-// CORS settings
-define('ALLOWED_ORIGINS', [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost:8080',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:8080',
-    'https://adilcreator.com',
-    'https://www.adilcreator.com'
-]);
-=======
-$frontendUrl = $_ENV['FRONTEND_URL'] ?? 'https://adilgfx.com';
+// CORS settings - Dynamic based on environment
+$frontendUrl = $_ENV['FRONTEND_URL'] ?? 'https://adilcreator.com';
 $allowedOrigins = [$frontendUrl];
 
 // Include www/non-www variants for the configured frontend URL
@@ -55,6 +44,9 @@ if ($parsedFront && isset($parsedFront['scheme'], $parsedFront['host'])) {
 $allowedOrigins[] = 'http://localhost:5173';
 $allowedOrigins[] = 'http://localhost:8080';
 $allowedOrigins[] = 'http://localhost:3000';
+$allowedOrigins[] = 'http://127.0.0.1:5173';
+$allowedOrigins[] = 'http://127.0.0.1:3000';
+$allowedOrigins[] = 'http://127.0.0.1:8080';
 
 define('ALLOWED_ORIGINS', array_values(array_unique($allowedOrigins)));
 
