@@ -1,50 +1,171 @@
-RewriteEngine On
+# =============================================================================
+# Adil Creator Backend - Security & Optimization Rules
+# =============================================================================
 
-# Handle CORS preflight requests
-RewriteCond %{REQUEST_METHOD} OPTIONS
-RewriteRule ^(.*)$ index.php [QSA,L]
+# -----------------------------------------------------------------------------
+# SECURITY: Deny Access to Sensitive Files
+# -----------------------------------------------------------------------------
 
-# Route all requests to index.php
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ index.php [QSA,L]
-
-# Security headers
-<IfModule mod_headers.c>
-    Header always set X-Content-Type-Options nosniff
-    Header always set X-Frame-Options DENY
-    Header always set X-XSS-Protection "1; mode=block"
-    Header always set Referrer-Policy "strict-origin-when-cross-origin"
-</IfModule>
-
-# PHP settings
-<IfModule mod_php7.c>
-    php_value upload_max_filesize 10M
-    php_value post_max_size 10M
-    php_value max_execution_time 30
-    php_value memory_limit 128M
-</IfModule>
-
-# Disable directory browsing
-Options -Indexes
-
-# Protect sensitive files
-<Files "composer.json">
-    Order Allow,Deny
-    Deny from all
-</Files>
-
-<Files "composer.lock">
-    Order Allow,Deny
-    Deny from all
-</Files>
-
-<Files ".env">
-    Order Allow,Deny
-    Deny from all
-</Files>
-
-<FilesMatch "\.md$">
-    Order Allow,Deny
+# Deny access to .env files
+<FilesMatch "^\.env">
+    Order allow,deny
     Deny from all
 </FilesMatch>
+
+# Deny access to configuration files
+<FilesMatch "\.(sql|sqlite|db|ini|log|sh|inc|conf)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Deny access to composer files
+<FilesMatch "^(composer\.(json|lock)|package\.(json|lock))$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Deny access to git files
+<FilesMatch "^\.git">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# -----------------------------------------------------------------------------
+# SECURITY: Disable Directory Listings
+# -----------------------------------------------------------------------------
+Options -Indexes
+
+# -----------------------------------------------------------------------------
+# SECURITY: Block Access to Sensitive Directories
+# -----------------------------------------------------------------------------
+RedirectMatch 403 /\.git
+RedirectMatch 403 /database/
+RedirectMatch 403 /vendor/
+RedirectMatch 403 /cache/
+RedirectMatch 403 /config/
+RedirectMatch 403 /classes/
+RedirectMatch 403 /middleware/
+RedirectMatch 403 /cron/
+
+# -----------------------------------------------------------------------------
+# PHP SECURITY: Disable Dangerous Functions (if allowed by host)
+# -----------------------------------------------------------------------------
+<IfModule mod_php.c>
+    php_flag display_errors Off
+    php_flag log_errors On
+    php_value error_log /home/u720615217/logs/php_errors.log
+</IfModule>
+
+# -----------------------------------------------------------------------------
+# PERFORMANCE: Enable GZIP Compression
+# -----------------------------------------------------------------------------
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE text/javascript
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# -----------------------------------------------------------------------------
+# PERFORMANCE: Browser Caching
+# -----------------------------------------------------------------------------
+<IfModule mod_expires.c>
+    ExpiresActive On
+    
+    # Images
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/x-icon "access plus 1 year"
+    
+    # CSS and JavaScript
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType text/javascript "access plus 1 month"
+    
+    # Others
+    ExpiresByType application/pdf "access plus 1 month"
+    ExpiresByType application/json "access plus 1 hour"
+</IfModule>
+
+# -----------------------------------------------------------------------------
+# CORS Headers (for API access)
+# -----------------------------------------------------------------------------
+<IfModule mod_headers.c>
+    # Allow from specific origin (configured via PHP)
+    Header always set Access-Control-Allow-Credentials "true"
+    
+    # Security Headers
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    
+    # Remove sensitive headers
+    Header unset X-Powered-By
+    Header unset Server
+</IfModule>
+
+# -----------------------------------------------------------------------------
+# URL REWRITING: API Routes
+# -----------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /backend/
+    
+    # Don't rewrite existing files
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    
+    # Route all API requests through index.php
+    RewriteRule ^api/(.*)$ api/$1 [L]
+    
+    # Force HTTPS (Hostinger provides free SSL)
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# -----------------------------------------------------------------------------
+# FILE UPLOAD: Limit Upload Size
+# -----------------------------------------------------------------------------
+<IfModule mod_php.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 12M
+    php_value max_execution_time 60
+    php_value max_input_time 60
+</IfModule>
+
+# -----------------------------------------------------------------------------
+# PREVENT HOTLINKING: Protect Bandwidth
+# -----------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine on
+    RewriteCond %{HTTP_REFERER} !^$
+    RewriteCond %{HTTP_REFERER} !^https://(www\.)?adilcreator\.com [NC]
+    RewriteRule \.(jpg|jpeg|png|gif|svg)$ - [F,NC]
+</IfModule>
+
+# -----------------------------------------------------------------------------
+# ERROR PAGES: Custom Error Documents
+# -----------------------------------------------------------------------------
+ErrorDocument 403 /backend/errors/403.html
+ErrorDocument 404 /backend/errors/404.html
+ErrorDocument 500 /backend/errors/500.html
+
+# -----------------------------------------------------------------------------
+# MAINTENANCE MODE (Uncomment to enable)
+# -----------------------------------------------------------------------------
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond %{REMOTE_ADDR} !^123\.456\.789\.000
+#     RewriteCond %{REQUEST_URI} !^/maintenance\.html$
+#     RewriteRule ^(.*)$ /maintenance.html [R=302,L]
+# </IfModule>

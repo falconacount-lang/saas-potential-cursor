@@ -24,10 +24,26 @@ class Database {
     private $conn;
 
     public function __construct() {
-        $this->host = $_ENV['DB_HOST'] ?? 'localhost';
-        $this->db_name = $_ENV['DB_NAME'] ?? 'u720615217_adil_db';
-        $this->username = $_ENV['DB_USER'] ?? 'u720615217_adil';
-        $this->password = $_ENV['DB_PASS'] ?? 'Muhadilmmad#11213';
+        // Load .env if not already loaded
+        if (empty($_ENV['DB_NAME']) && file_exists(__DIR__ . '/../../.env')) {
+            $lines = file(__DIR__ . '/../../.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            foreach ($lines as $line) {
+                if (strpos(trim($line), '#') === 0) continue;
+                if (strpos($line, '=') === false) continue;
+                list($name, $value) = explode('=', $line, 2);
+                $_ENV[trim($name)] = trim($value);
+            }
+        }
+        
+        // Require environment variables (no defaults for security)
+        if (empty($_ENV['DB_HOST']) || empty($_ENV['DB_NAME']) || empty($_ENV['DB_USER']) || empty($_ENV['DB_PASS'])) {
+            throw new Exception('Database credentials not configured. Please create .env file with DB_HOST, DB_NAME, DB_USER, and DB_PASS');
+        }
+        
+        $this->host = $_ENV['DB_HOST'];
+        $this->db_name = $_ENV['DB_NAME'];
+        $this->username = $_ENV['DB_USER'];
+        $this->password = $_ENV['DB_PASS'];
     }
 
     public function getConnection() {
