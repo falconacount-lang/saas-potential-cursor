@@ -117,6 +117,22 @@ try {
                 require_once __DIR__ . '/api/test.php';
                 break;
                 
+            // AI endpoints
+            case strpos($apiPath, '/ai/') === 0:
+                $aiPath = substr($apiPath, 4); // Remove '/ai/' prefix
+                
+                switch (true) {
+                    case $aiPath === 'chat' || strpos($aiPath, 'chat/') === 0:
+                        require_once __DIR__ . '/api/ai/chat.php';
+                        break;
+                        
+                    default:
+                        http_response_code(404);
+                        echo json_encode(['error' => 'AI endpoint not found']);
+                        break;
+                }
+                break;
+                
             // Admin endpoints
             case strpos($apiPath, '/admin/') === 0:
                 $adminPath = substr($apiPath, 7); // Remove '/admin/' prefix
@@ -153,9 +169,13 @@ try {
                         require_once __DIR__ . '/api/admin/blogs.php';
                         break;
                         
+                    case $adminPath === 'api-keys' || strpos($adminPath, 'api-keys/') === 0:
+                        require_once __DIR__ . '/api/admin/api-keys.php';
+                        break;
+                        
                     default:
                         http_response_code(404);
-                        echo json_encode(['error' => 'Admin endpoint not found']);
+                        echo json_encode(['error' => 'Admin endpoint not found', 'path' => $adminPath]);
                         break;
                 }
                 break;
@@ -202,31 +222,36 @@ try {
                 break;
         }
     } else {
-        // Non-API requests - serve admin panel or redirect
-        if ($path === '/' || $path === '/admin' || strpos($path, '/admin/') === 0) {
-            // Serve admin panel
-            require_once __DIR__ . '/admin/index.php';
-        } else {
-            // API status endpoint
-            echo json_encode([
-                'success' => true,
-                'message' => 'Adil GFX Backend API',
-                'version' => APP_VERSION,
-                'timestamp' => date('c'),
-                'endpoints' => [
-                    'auth' => '/api/auth.php',
-                    'blogs' => '/api/blogs.php',
-                    'portfolio' => '/api/portfolio.php',
-                    'services' => '/api/services.php',
-                    'testimonials' => '/api/testimonials.php',
-                    'settings' => '/api/settings.php',
-                    'contact' => '/api/contact.php',
-                    'uploads' => '/api/uploads.php',
-                    'admin' => '/api/admin/',
-                    'user' => '/api/user/'
-                ]
-            ]);
-        }
+        // API status endpoint (admin is now React-based on frontend)
+        echo json_encode([
+            'success' => true,
+            'message' => 'Adil GFX Backend API',
+            'version' => APP_VERSION ?? '1.0.0',
+            'timestamp' => date('c'),
+            'environment' => $_ENV['APP_ENV'] ?? 'production',
+            'endpoints' => [
+                'auth' => '/api/auth',
+                'blogs' => '/api/blogs',
+                'portfolio' => '/api/portfolio',
+                'services' => '/api/services',
+                'testimonials' => '/api/testimonials',
+                'settings' => '/api/settings',
+                'contact' => '/api/contact',
+                'uploads' => '/api/uploads',
+                'admin' => '/api/admin/',
+                'user' => '/api/user/',
+                'ai' => '/api/ai/',
+                'funnel' => '/api/funnel/'
+            ],
+            'features' => [
+                'ai_integration' => true,
+                'social_media_automation' => true,
+                'lead_prospecting' => true,
+                'analytics' => true,
+                'pwa' => true
+            ],
+            'note' => 'Admin panel available at frontend /admin route'
+        ]);
     }
 } catch (Exception $e) {
     http_response_code(500);

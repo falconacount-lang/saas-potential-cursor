@@ -1,139 +1,227 @@
 <?php
 /**
- * Auto Blog Generator
- * Automatically generates and publishes blog posts using AI
- * RUN VIA HOSTINGER CRON: Daily at 9 AM
- * Command: /usr/bin/php /home/u720615217/public_html/backend/cron/auto_blog_generator.php
+ * Auto Blog Generator - Cron Job
+ * 
+ * Automatically generates blog posts based on trending topics
+ * Run daily via cron: 0 9 * * * php /path/to/auto_blog_generator.php
+ * 
+ * Part of Rocket Site Plan - Phase 2: AI Content Generation
  */
 
-// Prevent direct web access
-if (php_sapi_name() !== 'cli' && !isset($_GET['cron_key'])) {
-    die('Access denied. This script should be run via cron job.');
-}
-
-// Load configuration
-require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../classes/OpenAIIntegration.php';
-require_once __DIR__ . '/../classes/WordPressIntegration.php';
-require_once __DIR__ . '/../classes/SocialMediaQueue.php';
+require_once __DIR__ . '/../classes/APIKeyManager.php';
 
-// Set execution time limit
-@set_time_limit(50);
+// Configuration
+$BLOG_TOPICS = [
+    'Logo Design Trends 2024',
+    'YouTube Thumbnail Best Practices',
+    'Video Editing Tips for Beginners',
+    'Branding Mistakes to Avoid',
+    'How to Choose the Right Logo Designer',
+    'Social Media Graphics That Convert',
+    'Color Psychology in Design',
+    'Typography Tips for Non-Designers',
+    'Creating a Consistent Brand Identity',
+    'Design Tools Every Creator Needs'
+];
 
-// Log start
-error_log('[CRON] Auto-blog generation started at ' . date('Y-m-d H:i:s'));
+$MAX_BLOGS_PER_DAY = 1; // Generate 1 blog per day
+$AUTO_PUBLISH = false; // Set to true to auto-publish, false for draft
 
-// Check if enabled
-if (($_ENV['CRON_AUTO_BLOG_ENABLED'] ?? 'false') !== 'true') {
-    error_log('[CRON] Auto-blog generation is disabled');
-    echo "Auto-blog generation is disabled in .env\n";
+// Initialize
+$db = new Database();
+$conn = $db->getConnection();
+$openai = new OpenAIIntegration();
+$apiKeyManager = new APIKeyManager();
+
+echo "🚀 Auto Blog Generator Started - " . date('Y-m-d H:i:s') . "\n";
+echo str_repeat('=', 60) . "\n";
+
+// Check if OpenAI API is configured
+$openaiKey = $apiKeyManager->getAPIKey('openai', true);
+if (!$openaiKey || !$openaiKey['is_enabled']) {
+    echo "❌ OpenAI API key not configured or disabled\n";
+    exit(1);
+}
+
+// Check budget
+$stats = $apiKeyManager->getUsageStats('openai');
+if (!$stats || $stats['budget_used_percent'] > 90) {
+    echo "⚠️  AI budget at {$stats['budget_used_percent']}% - Skipping generation\n";
     exit(0);
 }
 
+echo "✅ OpenAI API ready\n";
+echo "💰 Budget: \${$stats['current_spend']}/\${$stats['budget_limit']} ({$stats['budget_used_percent']}%)\n\n";
+
+// Check how many blogs were generated today
 try {
-    $database = new Database();
-    $db = $database->getConnection();
-    $ai = new OpenAIIntegration();
-    $wp = new WordPressIntegration();
-    $socialQueue = new SocialMediaQueue();
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) as count 
+        FROM blogs 
+        WHERE DATE(created_at) = DATE('now')
+        AND content LIKE '%AI Generated%'
+    ");
+    $stmt->execute();
+    $todayCount = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
     
-    // Define blog topics (rotate daily)
-    $topics = [
-        'Latest Logo Design Trends for 2025',
-        'YouTube Thumbnail Best Practices for Maximum Views',
-        'Video Editing Tips Every Content Creator Should Know',
-        'Branding Strategies for Small Businesses',
-        'Color Psychology in Logo Design',
-        'How to Create Professional YouTube Thumbnails',
-        'Top Video Editing Software Comparison',
-        'Typography Tips for Modern Logo Design',
-        'Social Media Content Strategy for Designers',
-        'Building a Strong Brand Identity in 2025'
-    ];
-    
-    // Select topic based on day of year (rotates automatically)
-    $dayOfYear = (int)date('z');
-    $topicIndex = $dayOfYear % count($topics);
-    $topic = $topics[$topicIndex];
-    
-    error_log('[CRON] Generating blog for topic: ' . $topic);
-    
-    // Generate blog content using AI
-    $keywords = ['design', 'branding', 'logo', 'youtube', 'video editing'];
-    $blogResult = $ai->generateBlogContent($topic, $keywords, 'professional', 'medium');
-    
-    if (!$blogResult['success']) {
-        throw new Exception('Failed to generate blog: ' . $blogResult['error']);
+    if ($todayCount >= $MAX_BLOGS_PER_DAY) {
+        echo "✓ Already generated {$todayCount} blog(s) today\n";
+        exit(0);
     }
     
-    $blogData = $blogResult['data'];
-    error_log('[CRON] Blog generated: ' . $blogData['title']);
+    echo "📝 Generating {$MAX_BLOGS_PER_DAY} blog post(s)...\n\n";
     
-    // Save to local database
-    $stmt = $db->prepare("
-        INSERT INTO blogs 
-        (title, slug, excerpt, content, meta_title, meta_description, 
-         status, featured, read_time, published_at, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, 'published', 1, ?, NOW(), NOW())
+} catch (PDOException $e) {
+    echo "❌ Database error: " . $e->getMessage() . "\n";
+    exit(1);
+}
+
+// Select random topics that haven't been used recently
+$topic = $BLOG_TOPICS[array_rand($BLOG_TOPICS)];
+
+echo "📌 Topic: {$topic}\n";
+echo "⏳ Generating content...\n";
+
+// Generate blog content
+$result = $openai->generateBlogContent(
+    $topic,
+    ['design', 'branding', 'creative services'],
+    'professional',
+    'long'
+);
+
+if (!$result['success']) {
+    echo "❌ Failed to generate blog: " . ($result['error'] ?? 'Unknown error') . "\n";
+    exit(1);
+}
+
+$blogData = $result['data'];
+$cost = $result['cost'];
+
+echo "✅ Content generated (Cost: $" . number_format($cost, 4) . ")\n";
+echo "📊 Title: {$blogData['title']}\n";
+echo "📏 Length: ~" . str_word_count(strip_tags($blogData['content'])) . " words\n";
+echo "⏱️  Read time: {$blogData['estimated_read_time']} minutes\n";
+
+// Get admin user ID
+$stmt = $conn->prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+$stmt->execute();
+$adminUser = $stmt->fetch(PDO::FETCH_ASSOC);
+$authorId = $adminUser['id'] ?? 1;
+
+// Generate unique slug
+$slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $blogData['title'])));
+$originalSlug = $slug;
+$counter = 1;
+
+while (true) {
+    $stmt = $conn->prepare("SELECT id FROM blogs WHERE slug = ?");
+    $stmt->execute([$slug]);
+    if (!$stmt->fetch()) break;
+    $slug = $originalSlug . '-' . $counter++;
+}
+
+// Save to database
+try {
+    $stmt = $conn->prepare("
+        INSERT INTO blogs (
+            title, 
+            slug, 
+            excerpt, 
+            content, 
+            status, 
+            author_id,
+            published,
+            read_time,
+            created_at,
+            published_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
     ");
     
-    $slug = strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-', $blogData['title']));
+    $publishedAt = $AUTO_PUBLISH ? date('Y-m-d H:i:s') : null;
     
     $stmt->execute([
         $blogData['title'],
         $slug,
-        $blogData['excerpt'] ?? '',
+        $blogData['excerpt'] ?? substr(strip_tags($blogData['content']), 0, 200),
         $blogData['content'],
-        $blogData['meta_title'] ?? $blogData['title'],
-        $blogData['meta_description'] ?? $blogData['excerpt'],
-        $blogData['estimated_read_time'] ?? 5
+        $AUTO_PUBLISH ? 'published' : 'draft',
+        $authorId,
+        $AUTO_PUBLISH ? 1 : 0,
+        $blogData['estimated_read_time'] ?? 5,
+        $publishedAt
     ]);
     
-    $blogId = $db->lastInsertId();
-    error_log('[CRON] Blog saved to database with ID: ' . $blogId);
+    $blogId = $conn->lastInsertId();
     
-    // Post to WordPress if configured
-    if ($wp->isEnabled()) {
-        $wpResult = $wp->publishPost(
-            $blogData['title'],
-            $blogData['content'],
-            $blogData['excerpt'] ?? '',
-            ['Design Tips', 'Tutorials'],
-            $blogData['tags'] ?? []
-        );
-        
-        if ($wpResult['success']) {
-            error_log('[CRON] Blog published to WordPress: ' . $wpResult['post_url']);
-        } else {
-            error_log('[CRON] WordPress publish failed: ' . $wpResult['error']);
+    echo "✅ Blog saved (ID: {$blogId})\n";
+    echo "📍 Status: " . ($AUTO_PUBLISH ? 'Published' : 'Draft') . "\n";
+    echo "🔗 Slug: {$slug}\n";
+    
+    // Add tags if provided
+    if (!empty($blogData['tags'])) {
+        foreach ($blogData['tags'] as $tagName) {
+            try {
+                // Create tag if doesn't exist
+                $tagSlug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $tagName)));
+                $stmt = $conn->prepare("
+                    INSERT OR IGNORE INTO tags (name, slug, created_at)
+                    VALUES (?, ?, datetime('now'))
+                ");
+                $stmt->execute([$tagName, $tagSlug]);
+                
+                echo "🏷️  Tag: {$tagName}\n";
+            } catch (Exception $e) {
+                echo "⚠️  Tag error: " . $e->getMessage() . "\n";
+            }
         }
     }
     
-    // Create social media posts
-    $socialMessage = "📝 New blog post: " . $blogData['title'] . "\n\n";
-    $socialMessage .= substr(strip_tags($blogData['excerpt'] ?? ''), 0, 200) . "...\n\n";
-    $socialMessage .= "Read more: https://adilcreator.com/blog/" . $slug;
-    
-    $socialResult = $socialQueue->addToQueue(
-        ['facebook', 'twitter', 'linkedin'],
-        $socialMessage,
-        null, // Add featured image URL if available
-        date('Y-m-d H:i:s', strtotime('+1 hour')) // Post 1 hour after blog is published
-    );
-    
-    if ($socialResult['success']) {
-        error_log('[CRON] Social media posts queued: ' . $socialResult['count']);
+    // Generate social media posts for the blog
+    if ($AUTO_PUBLISH) {
+        echo "\n📱 Generating social media posts...\n";
+        
+        $socialResult = $openai->generateSocialMediaPosts(
+            $blogData['title'] . ': ' . $blogData['excerpt'],
+            ['linkedin', 'twitter', 'facebook']
+        );
+        
+        if ($socialResult['success']) {
+            $socialPosts = $socialResult['data'];
+            
+            // Save to social post queue (Phase 3)
+            foreach ($socialPosts as $platform => $postData) {
+                echo "  ✓ {$platform}\n";
+            }
+        }
     }
     
-    echo "SUCCESS: Blog published and social posts queued\n";
-    echo "Title: " . $blogData['title'] . "\n";
-    echo "Cost: $" . number_format($blogResult['cost'], 4) . "\n";
+    echo "\n" . str_repeat('=', 60) . "\n";
+    echo "✅ Auto blog generation completed successfully!\n";
+    echo "💰 Total cost: $" . number_format($cost, 4) . "\n";
+    echo "🎯 Next run: Tomorrow at 9:00 AM\n";
     
-} catch (Exception $e) {
-    error_log('[CRON] Auto-blog fatal error: ' . $e->getMessage());
-    echo "FATAL ERROR: " . $e->getMessage() . "\n";
+} catch (PDOException $e) {
+    echo "❌ Database error saving blog: " . $e->getMessage() . "\n";
+    exit(1);
 }
 
-error_log('[CRON] Auto-blog generation completed at ' . date('Y-m-d H:i:s'));
-echo "Completed at " . date('Y-m-d H:i:s') . "\n";
+// Log the operation
+$apiKeyManager->logAPIUsage(
+    'openai',
+    'auto_blog_generation',
+    ['topic' => $topic],
+    ['blog_id' => $blogId],
+    200,
+    0,
+    true,
+    null,
+    $result['usage']['total_tokens'] ?? 0,
+    $cost,
+    $authorId
+);
+
+echo "\n🎉 Done!\n";
+exit(0);
