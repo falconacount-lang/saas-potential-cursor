@@ -35,15 +35,25 @@ class Database {
             }
         }
         
-        // Require environment variables (no defaults for security)
-        if (empty($_ENV['DB_HOST']) || empty($_ENV['DB_NAME']) || empty($_ENV['DB_USER']) || empty($_ENV['DB_PASS'])) {
-            throw new Exception('Database credentials not configured. Please create .env file with DB_HOST, DB_NAME, DB_USER, and DB_PASS');
+        // Check if using SQLite (file path) or MySQL (database name)
+        $isSqlite = strpos($_ENV['DB_NAME'], '.sqlite') !== false || strpos($_ENV['DB_NAME'], '/') !== false;
+        
+        if ($isSqlite) {
+            // For SQLite, only DB_NAME is required
+            if (empty($_ENV['DB_NAME'])) {
+                throw new Exception('Database file path not configured. Please set DB_NAME in .env file');
+            }
+        } else {
+            // For MySQL, all credentials are required
+            if (empty($_ENV['DB_HOST']) || empty($_ENV['DB_NAME']) || empty($_ENV['DB_USER']) || empty($_ENV['DB_PASS'])) {
+                throw new Exception('Database credentials not configured. Please create .env file with DB_HOST, DB_NAME, DB_USER, and DB_PASS');
+            }
         }
         
-        $this->host = $_ENV['DB_HOST'];
+        $this->host = $_ENV['DB_HOST'] ?? 'localhost';
         $this->db_name = $_ENV['DB_NAME'];
-        $this->username = $_ENV['DB_USER'];
-        $this->password = $_ENV['DB_PASS'];
+        $this->username = $_ENV['DB_USER'] ?? 'root';
+        $this->password = $_ENV['DB_PASS'] ?? '';
     }
 
     public function getConnection() {

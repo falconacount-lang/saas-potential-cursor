@@ -54,10 +54,17 @@ try {
             case '2':
                 echo "🗑️  Dropping existing tables...\n";
                 foreach ($existingTables as $table) {
-                    if ($driver === 'sqlite') {
-                        $db->exec("DROP TABLE IF EXISTS \"$table\"");
-                    } else {
-                        $db->exec("DROP TABLE IF EXISTS `$table`");
+                    try {
+                        if ($driver === 'sqlite') {
+                            $db->exec("DROP TABLE IF EXISTS \"$table\"");
+                        } else {
+                            $db->exec("DROP TABLE IF EXISTS `$table`");
+                        }
+                    } catch (PDOException $e) {
+                        // Ignore errors for non-existent tables
+                        if (strpos($e->getMessage(), 'no such table') === false) {
+                            echo "  ⚠️  Warning: Could not drop table $table: " . $e->getMessage() . "\n";
+                        }
                     }
                 }
                 echo "✅ All tables dropped.\n\n";
@@ -91,23 +98,57 @@ try {
     $schema = preg_replace('/--.*$/m', '', $schema);
     $queries = array_filter(array_map('trim', explode(';', $schema)));
     
-    $tableCount = 0;
+    // Separate CREATE TABLE and CREATE INDEX statements
+    $createTableQueries = [];
+    $createIndexQueries = [];
+    
     foreach ($queries as $query) {
-        if (empty($query) || stripos($query, 'CREATE DATABASE') !== false || stripos($query, 'USE ') !== false) {
+        if (empty($query) || 
+            stripos($query, 'CREATE DATABASE') !== false || 
+            stripos($query, 'USE ') !== false ||
+            stripos($query, 'SELECT ') !== false ||
+            stripos($query, 'INSERT ') !== false ||
+            stripos($query, 'UPDATE ') !== false ||
+            stripos($query, 'DELETE ') !== false ||
+            stripos($query, 'PRAGMA ') !== false) {
             continue;
         }
         
+        if (stripos($query, 'CREATE TABLE') !== false) {
+            $createTableQueries[] = $query;
+        } elseif (stripos($query, 'CREATE INDEX') !== false) {
+            $createIndexQueries[] = $query;
+        }
+    }
+    
+    // Execute CREATE TABLE statements first
+    $tableCount = 0;
+    foreach ($createTableQueries as $query) {
         try {
-            $db->exec($query);
-            if (stripos($query, 'CREATE TABLE') !== false) {
-                $tableCount++;
-                preg_match('/CREATE TABLE\s+`?(\w+)`?/i', $query, $matches);
-                $tableName = $matches[1] ?? 'unknown';
-                echo "  ✅ Created table: $tableName\n";
-            }
+            $stmt = $db->prepare($query);
+            $stmt->execute();
+            $stmt->closeCursor();
+            
+            $tableCount++;
+            preg_match('/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?`?(\w+)`?/i', $query, $matches);
+            $tableName = $matches[1] ?? 'unknown';
+            echo "  ✅ Created table: $tableName\n";
         } catch (PDOException $e) {
             if (strpos($e->getMessage(), 'already exists') === false) {
                 throw $e;
+            }
+        }
+    }
+    
+    // Execute CREATE INDEX statements after tables are created
+    foreach ($createIndexQueries as $query) {
+        try {
+            $stmt = $db->prepare($query);
+            $stmt->execute();
+            $stmt->closeCursor();
+        } catch (PDOException $e) {
+            if (strpos($e->getMessage(), 'already exists') === false) {
+                echo "  ⚠️  Warning: Could not create index: " . $e->getMessage() . "\n";
             }
         }
     }
@@ -118,8 +159,10 @@ try {
     
     // Check if admin user already exists
     echo "🔍 Checking for existing admin user...\n";
-    $stmt = $db->query("SELECT COUNT(*) FROM users WHERE role = 'admin'");
+    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'admin'");
+    $stmt->execute();
     $adminCount = $stmt->fetchColumn();
+    $stmt->closeCursor();
     
     if ($adminCount > 0) {
         echo "👤 Admin user already exists. Database setup complete.\n";
