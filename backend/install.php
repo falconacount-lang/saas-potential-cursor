@@ -226,6 +226,32 @@ try {
     
     // Test API endpoints
     echo "\n🧪 Testing API endpoints...\n";
+    
+    // Detect the current server URL
+    $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    
+    // If running from CLI, try to detect from .env or use localhost
+    if (php_sapi_name() === 'cli') {
+        // Try to get backend URL from environment
+        $backendUrl = $_ENV['BACKEND_URL'] ?? null;
+        if ($backendUrl) {
+            $baseUrl = rtrim($backendUrl, '/');
+        } else {
+            $baseUrl = 'http://localhost:8000';
+            echo "  ℹ️  Running in CLI mode - using localhost:8000 for tests\n";
+            echo "  ℹ️  Set BACKEND_URL in .env for production URL testing\n";
+        }
+    } else {
+        // Running via web server - construct URL from current request
+        $baseUrl = $protocol . '://' . $host;
+        // Remove /install.php from path if present
+        $scriptPath = dirname($_SERVER['SCRIPT_NAME']);
+        if ($scriptPath !== '/') {
+            $baseUrl .= $scriptPath;
+        }
+    }
+    
     $testEndpoints = [
         '/api/test.php' => 'API Test',
         '/api/settings.php' => 'Settings API',
@@ -237,8 +263,17 @@ try {
     
     foreach ($testEndpoints as $endpoint => $name) {
         try {
-            $url = 'http://localhost:8000' . $endpoint;
-            $context = stream_context_create(['http' => ['timeout' => 5]]);
+            $url = $baseUrl . $endpoint;
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => 5,
+                    'ignore_errors' => true
+                ],
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false
+                ]
+            ]);
             $response = @file_get_contents($url, false, $context);
             
             if ($response !== false) {
