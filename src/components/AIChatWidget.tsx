@@ -1,112 +1,73 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { 
-  MessageCircle, 
-  Send, 
-  X, 
-  Bot, 
-  User, 
-  Minimize2, 
-  Maximize2,
-  Phone,
-  Mail,
-  ExternalLink,
-  Loader2
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Card } from '@/components/ui/card';
+import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
 
-interface ChatMessage {
+interface Message {
   id: string;
-  type: 'user' | 'ai' | 'system';
+  type: 'user' | 'ai';
   content: string;
   timestamp: Date;
-  suggested_actions?: string[];
 }
 
 interface AIChatWidgetProps {
-  className?: string;
-  position?: 'bottom-right' | 'bottom-left' | 'inline';
-  theme?: 'light' | 'dark';
+  position?: 'bottom-right' | 'bottom-left';
   primaryColor?: string;
+  className?: string;
 }
 
 const AIChatWidget: React.FC<AIChatWidgetProps> = ({
-  className,
   position = 'bottom-right',
-  theme = 'light',
-  primaryColor = '#dc2626'
+  primaryColor = '#dc2626',
+  className = ''
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      type: 'ai',
+      content: 'Hi! 👋 I\'m your AI assistant. How can I help you with your design needs today?',
+      timestamp: new Date()
+    }
+  ]);
+  const [inputValue, setInputValue] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [sessionId] = useState(() => 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9));
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // Initialize with welcome message
-    if (messages.length === 0) {
-      setMessages([
-        {
-          id: 'welcome',
-          type: 'ai',
-          content: "👋 Hi! I'm here to help you with questions about our design services. How can I assist you today?",
-          timestamp: new Date(),
-          suggested_actions: ['view_services', 'request_quote', 'view_portfolio']
-        }
-      ]);
-    }
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setHasUnreadMessages(false);
-      // Focus input when chat opens
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
-    }
-  }, [isOpen]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
+  const sendMessage = async () => {
+    if (!inputValue.trim() || isTyping) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
       type: 'user',
-      content: inputMessage.trim(),
+      content: inputValue.trim(),
       timestamp: new Date()
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setIsLoading(true);
+    setInputValue('');
+    setIsTyping(true);
 
     try {
-      const response = await fetch('/backend/api/ai.php/chat/support', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/ai/chat`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           message: userMessage.content,
           session_id: sessionId,
           context: {
-            source: 'website_chat',
             page: window.location.pathname,
             referrer: document.referrer
           }
@@ -116,43 +77,27 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
       const data = await response.json();
 
       if (data.success) {
-        const aiMessage: ChatMessage = {
-          id: `ai-${Date.now()}`,
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
           type: 'ai',
           content: data.data.response,
-          timestamp: new Date(),
-          suggested_actions: data.data.suggested_actions
+          timestamp: new Date()
         };
-
         setMessages(prev => [...prev, aiMessage]);
-        setSessionId(data.data.session_id);
-
-        // Show notification if chat is closed
-        if (!isOpen) {
-          setHasUnreadMessages(true);
-        }
       } else {
-        // Show error message
-        const errorMessage: ChatMessage = {
-          id: `error-${Date.now()}`,
-          type: 'system',
-          content: 'Sorry, I encountered an error. Please try again or contact us directly.',
-          timestamp: new Date(),
-          suggested_actions: ['contact_form']
-        };
-        setMessages(prev => [...prev, errorMessage]);
+        throw new Error(data.error || 'Failed to get response');
       }
     } catch (error) {
       console.error('Chat error:', error);
-      const errorMessage: ChatMessage = {
-        id: `error-${Date.now()}`,
-        type: 'system',
-        content: 'Connection error. Please check your internet connection and try again.',
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'Sorry, I\'m having trouble connecting right now. Please try again or contact us directly at admin@adilcreator.com',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
-      setIsLoading(false);
+      setIsTyping(false);
     }
   };
 
@@ -163,237 +108,146 @@ const AIChatWidget: React.FC<AIChatWidgetProps> = ({
     }
   };
 
-  const handleSuggestedAction = (action: string) => {
-    switch (action) {
-      case 'view_services':
-        window.open('/services', '_blank');
-        break;
-      case 'request_quote':
-        window.open('/contact', '_blank');
-        break;
-      case 'view_portfolio':
-        window.open('/portfolio', '_blank');
-        break;
-      case 'contact_form':
-        window.open('/contact', '_blank');
-        break;
-      default:
-        break;
-    }
+  const positionClasses = {
+    'bottom-right': 'bottom-6 right-6',
+    'bottom-left': 'bottom-6 left-6'
   };
 
-  const getSuggestedActionLabel = (action: string) => {
-    switch (action) {
-      case 'view_services': return 'View Services';
-      case 'request_quote': return 'Get Quote';
-      case 'view_portfolio': return 'View Portfolio';
-      case 'contact_form': return 'Contact Us';
-      default: return action;
-    }
-  };
+  const quickQuestions = [
+    'What services do you offer?',
+    'How much does a logo cost?',
+    'What\'s your turnaround time?',
+    'Can I see your portfolio?'
+  ];
 
-  const getSuggestedActionIcon = (action: string) => {
-    switch (action) {
-      case 'view_services': return <ExternalLink className="h-3 w-3" />;
-      case 'request_quote': return <Mail className="h-3 w-3" />;
-      case 'view_portfolio': return <ExternalLink className="h-3 w-3" />;
-      case 'contact_form': return <Phone className="h-3 w-3" />;
-      default: return <ExternalLink className="h-3 w-3" />;
-    }
-  };
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  // Position classes
-  const getPositionClasses = () => {
-    if (position === 'inline') return '';
-    
-    const base = 'fixed z-50';
-    switch (position) {
-      case 'bottom-right':
-        return `${base} bottom-4 right-4`;
-      case 'bottom-left':
-        return `${base} bottom-4 left-4`;
-      default:
-        return `${base} bottom-4 right-4`;
-    }
-  };
-
-  // Chat button (when closed)
-  if (!isOpen && position !== 'inline') {
-    return (
-      <div className={getPositionClasses()}>
-        <Button
-          onClick={() => setIsOpen(true)}
-          className={cn(
-            "relative rounded-full w-14 h-14 shadow-lg hover:shadow-xl transition-all duration-200",
-            className
-          )}
-          style={{ backgroundColor: primaryColor }}
-        >
-          <MessageCircle className="h-6 w-6 text-white" />
-          {hasUnreadMessages && (
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-          )}
-        </Button>
-      </div>
-    );
-  }
-
-  // Chat window
   return (
-    <div className={cn(
-      position === 'inline' ? 'w-full max-w-md mx-auto' : getPositionClasses(),
-      className
-    )}>
-      <Card className={cn(
-        "w-80 h-96 flex flex-col shadow-xl",
-        position === 'inline' && "w-full h-[500px]",
-        isMinimized && "h-14"
-      )}>
-        {/* Header */}
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-t-lg">
-          <div className="flex items-center space-x-2">
-            <Bot className="h-5 w-5" />
-            <CardTitle className="text-sm font-medium">
-              AI Assistant
-            </CardTitle>
-            <Badge variant="secondary" className="text-xs bg-white/20 text-white border-white/30">
-              Online
-            </Badge>
-          </div>
-          <div className="flex items-center space-x-1">
+    <div className={`fixed ${positionClasses[position]} z-50 ${className}`}>
+      {/* Chat Window */}
+      {isOpen && (
+        <Card className="w-[380px] h-[600px] mb-4 shadow-2xl flex flex-col animate-in slide-in-from-bottom-4 duration-300">
+          {/* Header */}
+          <div 
+            className="flex items-center justify-between p-4 border-b"
+            style={{ backgroundColor: primaryColor }}
+          >
+            <div className="flex items-center gap-3 text-white">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <MessageCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold">AI Assistant</h3>
+                <p className="text-xs opacity-90">Always here to help</p>
+              </div>
+            </div>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setIsMinimized(!isMinimized)}
-              className="h-6 w-6 p-0 text-white hover:bg-white/20"
+              onClick={() => setIsOpen(false)}
+              className="text-white hover:bg-white/20"
             >
-              {isMinimized ? <Maximize2 className="h-3 w-3" /> : <Minimize2 className="h-3 w-3" />}
+              <X className="h-5 w-5" />
             </Button>
-            {position !== 'inline' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsOpen(false)}
-                className="h-6 w-6 p-0 text-white hover:bg-white/20"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            )}
           </div>
-        </CardHeader>
 
-        {!isMinimized && (
-          <>
-            {/* Messages */}
-            <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((message) => (
-                <div key={message.id} className="space-y-2">
-                  <div
-                    className={cn(
-                      "flex",
-                      message.type === 'user' ? 'justify-end' : 'justify-start'
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                        message.type === 'user'
-                          ? 'bg-red-600 text-white'
-                          : message.type === 'ai'
-                          ? 'bg-gray-100 text-gray-900'
-                          : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
-                      )}
-                    >
-                      <div className="flex items-start space-x-2">
-                        {message.type === 'ai' && <Bot className="h-4 w-4 mt-0.5 text-red-600" />}
-                        {message.type === 'user' && <User className="h-4 w-4 mt-0.5" />}
-                        <div className="flex-1">
-                          <p className="whitespace-pre-wrap">{message.content}</p>
-                          <p className={cn(
-                            "text-xs mt-1 opacity-70",
-                            message.type === 'user' ? 'text-red-100' : 'text-gray-500'
-                          )}>
-                            {formatTime(message.timestamp)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Suggested Actions */}
-                  {message.suggested_actions && message.suggested_actions.length > 0 && (
-                    <div className="flex flex-wrap gap-1 ml-6">
-                      {message.suggested_actions.map((action, index) => (
-                        <Button
-                          key={index}
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleSuggestedAction(action)}
-                          className="h-6 text-xs"
-                        >
-                          {getSuggestedActionIcon(action)}
-                          <span className="ml-1">{getSuggestedActionLabel(action)}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-100 rounded-lg px-3 py-2 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <Bot className="h-4 w-4 text-red-600" />
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </CardContent>
-
-            {/* Input */}
-            <div className="p-4 border-t">
-              <div className="flex space-x-2">
-                <Input
-                  ref={inputRef}
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Type your message..."
-                  disabled={isLoading}
-                  className="flex-1"
-                />
-                <Button
-                  onClick={sendMessage}
-                  disabled={isLoading || !inputMessage.trim()}
-                  size="sm"
-                  style={{ backgroundColor: primaryColor }}
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    message.type === 'user'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white border border-gray-200'
+                  }`}
                 >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <span className="text-xs opacity-70 mt-1 block">
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Powered by AI • Response time: ~2-5 seconds
-              </p>
+            ))}
+
+            {isTyping && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-gray-200 rounded-lg px-4 py-2">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Quick Questions */}
+          {messages.length === 1 && (
+            <div className="px-4 py-2 border-t bg-white">
+              <p className="text-xs text-gray-500 mb-2">Quick questions:</p>
+              <div className="flex flex-wrap gap-2">
+                {quickQuestions.map((question, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setInputValue(question);
+                      setTimeout(sendMessage, 100);
+                    }}
+                    className="text-xs px-2 py-1 rounded-full border border-gray-300 hover:bg-gray-50 transition-colors"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
             </div>
-          </>
-        )}
-      </Card>
+          )}
+
+          {/* Input */}
+          <div className="p-4 border-t bg-white">
+            <div className="flex gap-2">
+              <Input
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Type your message..."
+                disabled={isTyping}
+                className="flex-1"
+              />
+              <Button
+                onClick={sendMessage}
+                disabled={!inputValue.trim() || isTyping}
+                style={{ backgroundColor: primaryColor }}
+                className="text-white"
+              >
+                {isTyping ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              Powered by AI • Instant responses
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Chat Button */}
+      {!isOpen && (
+        <Button
+          onClick={() => setIsOpen(true)}
+          className="w-16 h-16 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 animate-in zoom-in"
+          style={{ backgroundColor: primaryColor }}
+        >
+          <MessageCircle className="h-6 w-6 text-white" />
+        </Button>
+      )}
     </div>
   );
 };
