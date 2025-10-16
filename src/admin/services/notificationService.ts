@@ -8,7 +8,7 @@ interface ApiResponse<T = any> {
 }
 
 function getAuthToken(): string {
-  return localStorage.getItem('admin_token') || '';
+  return localStorage.getItem('auth_token') || '';
 }
 
 async function request<T = any>(
@@ -29,8 +29,8 @@ async function request<T = any>(
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
   if (response.status === 401) {
-    localStorage.removeItem('admin_token');
-    window.location.href = '/admin/login';
+    localStorage.removeItem('auth_token');
+    window.location.href = '/user/login';
     throw new Error('Unauthorized');
   }
 

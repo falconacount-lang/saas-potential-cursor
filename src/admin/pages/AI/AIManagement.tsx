@@ -103,12 +103,12 @@ const AIManagement: React.FC = () => {
       const [statsResponse, configResponse] = await Promise.all([
         fetch('/backend/api/ai.php/usage/stats', {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('admin_token')}`
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
           }
         }),
         fetch('/backend/api/ai.php/config', {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('admin_token')}`
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
           }
         })
       ]);

@@ -138,7 +138,7 @@ Look for these log entries in `php_errors.log`:
 
 To receive email notifications when cron jobs run, add to the command:
 ```bash
-/usr/bin/php /home/u720615217/public_html/backend/cron/process_social_queue.php | mail -s "Social Queue Cron" admin@adilcreator.com
+/usr/bin/php /home/u720615217/public_html/backend/cron/process_social_queue.php | mail -s "Social Queue Cron" admin@adilgfx.com
 ```
 
 Or use Hostinger's built-in email notification settings in the Cron Jobs panel.
