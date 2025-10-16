@@ -675,6 +675,271 @@ Return as JSON with:
         return $actions;
     }
     
+    /**
+     * Generate social media posts for multiple platforms
+     */
+    public function generateSocialMediaPosts($content, $platforms = ['linkedin', 'twitter', 'facebook', 'instagram']) {
+        if (!$this->canMakeAPICall(2.0)) {
+            return $this->getErrorResponse('Monthly AI budget exceeded');
+        }
+        
+        $cacheKey = 'social_' . md5($content . implode(',', $platforms));
+        $cached = $this->getCachedResponse($cacheKey);
+        if ($cached) {
+            return $cached;
+        }
+        
+        $platformSpecs = [
+            'linkedin' => '1-3 paragraphs, professional tone, 2-3 hashtags',
+            'twitter' => 'max 280 characters, engaging, 2-4 hashtags',
+            'facebook' => '1-2 paragraphs, conversational, emojis ok, call-to-action',
+            'instagram' => 'visual-focused caption, 5-10 hashtags, emojis, engaging'
+        ];
+        
+        $platformsList = [];
+        foreach ($platforms as $platform) {
+            if (isset($platformSpecs[$platform])) {
+                $platformsList[] = "- {$platform}: {$platformSpecs[$platform]}";
+            }
+        }
+        
+        $prompt = "Create engaging social media posts for the following content/topic:
+
+\"{$content}\"
+
+Generate posts for these platforms:
+" . implode("\n", $platformsList) . "
+
+For each platform:
+1. Adapt the message to platform best practices
+2. Include relevant hashtags
+3. Add call-to-action appropriate for platform
+4. Make it engaging and shareable
+
+Return as JSON with format:
+{
+  \"linkedin\": {\"text\": \"...\", \"hashtags\": [...], \"estimated_reach\": \"...\"},
+  \"twitter\": {\"text\": \"...\", \"hashtags\": [...], \"char_count\": 250},
+  \"facebook\": {\"text\": \"...\", \"hashtags\": [...], \"suggested_image\": \"...\"},
+  \"instagram\": {\"text\": \"...\", \"hashtags\": [...], \"caption_type\": \"...\"}
+}";
+
+        try {
+            $response = $this->makeAPICall([
+                'model' => $this->model,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are a social media expert who creates engaging content optimized for each platform. You understand platform algorithms, best practices, and audience engagement.'
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $prompt
+                    ]
+                ],
+                'max_tokens' => 1500,
+                'temperature' => 0.8
+            ]);
+            
+            if ($response['success']) {
+                $content = $response['data']['choices'][0]['message']['content'];
+                $parsedContent = json_decode($content, true);
+                
+                $result = [
+                    'success' => true,
+                    'data' => $parsedContent ?: ['posts' => $content],
+                    'usage' => $response['data']['usage'] ?? null,
+                    'cost' => $this->calculateCost($response['data']['usage'] ?? [])
+                ];
+                
+                $this->cacheResponse($cacheKey, $result, 3600); // Cache for 1 hour
+                $this->trackUsage('social_media_generation', $result['cost'], $response['data']['usage'] ?? []);
+                
+                return $result;
+            }
+            
+            return $response;
+            
+        } catch (Exception $e) {
+            error_log('OpenAI Social Media Generation Error: ' . $e->getMessage());
+            return $this->getErrorResponse('Failed to generate social media posts: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Generate email templates
+     */
+    public function generateEmailTemplate($type, $recipientData = [], $purpose = '') {
+        if (!$this->canMakeAPICall(1.5)) {
+            return $this->getErrorResponse('Monthly AI budget exceeded');
+        }
+        
+        $cacheKey = 'email_' . md5($type . json_encode($recipientData) . $purpose);
+        $cached = $this->getCachedResponse($cacheKey);
+        if ($cached) {
+            return $cached;
+        }
+        
+        $templateTypes = [
+            'welcome' => 'Welcome new client',
+            'follow_up' => 'Follow up after inquiry',
+            'project_update' => 'Project progress update',
+            'completion' => 'Project completion',
+            'thank_you' => 'Thank you for business',
+            'promotional' => 'Promotional offer',
+            'newsletter' => 'Newsletter content'
+        ];
+        
+        $templateDesc = $templateTypes[$type] ?? $type;
+        $recipientName = $recipientData['name'] ?? 'Valued Client';
+        $recipientBusiness = $recipientData['business'] ?? '';
+        
+        $prompt = "Create a professional email template for: {$templateDesc}
+
+Recipient: {$recipientName}" . ($recipientBusiness ? " from {$recipientBusiness}" : "") . "
+Purpose: {$purpose}
+
+Create an email that includes:
+1. Compelling subject line
+2. Professional greeting
+3. Main message (personalized and engaging)
+4. Clear call-to-action
+5. Professional signature
+
+Tone: Professional, friendly, client-focused
+Length: 2-4 paragraphs
+
+Company: Adil GFX - Professional Design Services
+
+Return as JSON:
+{
+  \"subject\": \"...\",
+  \"preview_text\": \"...\",
+  \"greeting\": \"...\",
+  \"body\": \"...\",
+  \"call_to_action\": \"...\",
+  \"signature\": \"...\",
+  \"alternate_subjects\": [...]
+}";
+
+        try {
+            $response = $this->makeAPICall([
+                'model' => $this->model,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are an email marketing expert who writes high-converting emails that build relationships and drive action.'
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $prompt
+                    ]
+                ],
+                'max_tokens' => 1000,
+                'temperature' => 0.7
+            ]);
+            
+            if ($response['success']) {
+                $content = $response['data']['choices'][0]['message']['content'];
+                $parsedContent = json_decode($content, true);
+                
+                $result = [
+                    'success' => true,
+                    'data' => $parsedContent ?: ['content' => $content],
+                    'usage' => $response['data']['usage'] ?? null,
+                    'cost' => $this->calculateCost($response['data']['usage'] ?? [])
+                ];
+                
+                $this->cacheResponse($cacheKey, $result, 7200); // Cache for 2 hours
+                $this->trackUsage('email_template_generation', $result['cost'], $response['data']['usage'] ?? []);
+                
+                return $result;
+            }
+            
+            return $response;
+            
+        } catch (Exception $e) {
+            error_log('OpenAI Email Template Error: ' . $e->getMessage());
+            return $this->getErrorResponse('Failed to generate email template: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Generate meta descriptions and SEO titles
+     */
+    public function generateSEOMetaTags($pageTitle, $pageContent, $keywords = []) {
+        if (!$this->canMakeAPICall(0.5)) {
+            return $this->getErrorResponse('Monthly AI budget exceeded');
+        }
+        
+        $cacheKey = 'seo_meta_' . md5($pageTitle . $pageContent . implode(',', $keywords));
+        $cached = $this->getCachedResponse($cacheKey);
+        if ($cached) {
+            return $cached;
+        }
+        
+        $keywordString = implode(', ', $keywords);
+        
+        $prompt = "Generate SEO-optimized meta tags for this page:
+
+Title: {$pageTitle}
+Keywords: {$keywordString}
+
+Content Summary:
+{$pageContent}
+
+Generate:
+1. SEO Title (50-60 characters)
+2. Meta Description (150-160 characters)
+3. 3 alternative title options
+4. 2 alternative description options
+5. Suggested keywords to target
+6. Open Graph title and description
+
+Return as JSON with all fields.";
+
+        try {
+            $response = $this->makeAPICall([
+                'model' => $this->model,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are an SEO expert who creates compelling meta tags that improve click-through rates and search rankings.'
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $prompt
+                    ]
+                ],
+                'max_tokens' => 500,
+                'temperature' => 0.6
+            ]);
+            
+            if ($response['success']) {
+                $content = $response['data']['choices'][0]['message']['content'];
+                $parsedContent = json_decode($content, true);
+                
+                $result = [
+                    'success' => true,
+                    'data' => $parsedContent ?: ['content' => $content],
+                    'usage' => $response['data']['usage'] ?? null,
+                    'cost' => $this->calculateCost($response['data']['usage'] ?? [])
+                ];
+                
+                $this->cacheResponse($cacheKey, $result, 86400); // Cache for 24 hours
+                $this->trackUsage('seo_meta_generation', $result['cost'], $response['data']['usage'] ?? []);
+                
+                return $result;
+            }
+            
+            return $response;
+            
+        } catch (Exception $e) {
+            error_log('OpenAI SEO Meta Error: ' . $e->getMessage());
+            return $this->getErrorResponse('Failed to generate SEO meta tags: ' . $e->getMessage());
+        }
+    }
+    
     private function getErrorResponse($message) {
         return [
             'success' => false,

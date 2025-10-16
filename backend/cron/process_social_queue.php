@@ -1,68 +1,46 @@
 <?php
 /**
- * Process Social Media Post Queue
- * RUN VIA HOSTINGER CRON: Every 1 hour
- * Command: /usr/bin/php /home/u720615217/public_html/backend/cron/process_social_queue.php
+ * Process Social Media Queue - Cron Job
+ * 
+ * Processes scheduled social media posts
+ * Run every 15 minutes: */15 * * * * php /path/to/process_social_queue.php
+ * 
+ * Part of Rocket Site Plan - Phase 3: Social Media Automation
  */
 
-// Prevent direct web access
-if (php_sapi_name() !== 'cli' && !isset($_GET['cron_key'])) {
-    die('Access denied. This script should be run via cron job.');
-}
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../classes/SocialMediaManager.php';
 
-// Load configuration
-require_once __DIR__ . '/../config/config.php';
-require_once __DIR__ . '/../classes/SocialMediaQueue.php';
-
-// Set execution time limit (shared hosting limit)
-@set_time_limit(50); // Leave 10 seconds buffer
-
-// Log start
-error_log('[CRON] Social queue processing started at ' . date('Y-m-d H:i:s'));
+echo "🚀 Social Media Queue Processor Started - " . date('Y-m-d H:i:s') . "\n";
+echo str_repeat('=', 60) . "\n";
 
 try {
-    $queue = new SocialMediaQueue();
+    $socialManager = new SocialMediaManager();
     
-    // Process up to 10 posts per run (adjust based on performance)
-    $result = $queue->processPendingPosts(10);
+    // Get available platforms
+    $platforms = $socialManager->getAvailablePlatforms();
+    echo "✅ Available platforms: " . implode(', ', $platforms) . "\n\n";
+    
+    // Process scheduled posts
+    echo "📤 Processing scheduled posts...\n";
+    $result = $socialManager->processScheduledPosts();
     
     if ($result['success']) {
-        $stats = $result['data'];
-        error_log(sprintf(
-            '[CRON] Processed: %d, Succeeded: %d, Failed: %d',
-            $stats['processed'],
-            $stats['succeeded'],
-            $stats['failed']
-        ));
-        
-        // Log each post result
-        foreach ($stats['details'] as $detail) {
-            if (!$detail['success']) {
-                error_log(sprintf(
-                    '[CRON] Failed to post to %s (ID: %d): %s',
-                    $detail['platform'],
-                    $detail['id'],
-                    $detail['error']
-                ));
-            }
-        }
-        
-        echo "SUCCESS: Processed {$stats['processed']} posts\n";
+        echo "✅ Processed: {$result['processed']}\n";
+        echo "❌ Failed: {$result['failed']}\n";
+        echo "📊 Total: {$result['total']}\n";
     } else {
-        error_log('[CRON] Error: ' . $result['error']);
-        echo "ERROR: " . $result['error'] . "\n";
+        echo "❌ Error: {$result['message']}\n";
+        exit(1);
     }
     
-    // Retry failed posts (max 3 attempts)
-    $retryResult = $queue->retryFailedPosts(5);
-    if ($retryResult['success'] && $retryResult['retried'] > 0) {
-        error_log('[CRON] Retried ' . $retryResult['retried'] . ' failed posts');
-    }
+    echo "\n" . str_repeat('=', 60) . "\n";
+    echo "✅ Queue processing completed!\n";
+    echo "🕒 Next run: In 15 minutes\n";
     
 } catch (Exception $e) {
-    error_log('[CRON] Fatal error: ' . $e->getMessage());
-    echo "FATAL ERROR: " . $e->getMessage() . "\n";
+    echo "❌ Fatal error: " . $e->getMessage() . "\n";
+    exit(1);
 }
 
-error_log('[CRON] Social queue processing completed at ' . date('Y-m-d H:i:s'));
-echo "Completed at " . date('Y-m-d H:i:s') . "\n";
+exit(0);
