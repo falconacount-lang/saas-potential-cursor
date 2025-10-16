@@ -650,13 +650,13 @@ CREATE INDEX IF NOT EXISTS idx_homepage_active ON homepage_content(is_active);
 
 -- Insert default admin user
 INSERT OR IGNORE INTO users (email, password, name, role, status, email_verified) VALUES
-('admin@adilcreator.com', '$2y$12$PXq0z7MbJKf/AQMEe6Fjsu6tZfjErrbYrGvtWyDnMa2my.xw46Xg2', 'Adil Creator Admin', 'admin', 'active', 1);
+('admin@adilgfx.com', '$2y$12$PXq0z7MbJKf/AQMEe6Fjsu6tZfjErrbYrGvtWyDnMa2my.xw46Xg2', 'Adil Creator Admin', 'admin', 'active', 1);
 
 -- Insert default settings
 INSERT OR IGNORE INTO settings (key, value, type, category, description) VALUES
 ('site_name', 'Adil Creator', 'text', 'general', 'Website name'),
 ('site_tagline', 'Professional Design & Creative Services', 'text', 'general', 'Website tagline'),
-('contact_email', 'admin@adilcreator.com', 'email', 'general', 'Primary contact email'),
+('contact_email', 'admin@adilgfx.com', 'email', 'general', 'Primary contact email'),
 ('site_url', 'https://adilcreator.com', 'url', 'general', 'Site URL');
 
 -- Insert default categories
