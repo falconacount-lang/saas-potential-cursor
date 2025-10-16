@@ -24,15 +24,26 @@ class Database {
     private $conn;
 
     public function __construct() {
-        // Require environment variables (no defaults for security)
-        if (empty($_ENV['DB_HOST']) || empty($_ENV['DB_NAME']) || empty($_ENV['DB_USER']) || empty($_ENV['DB_PASS'])) {
-            throw new Exception('Database credentials not configured. Please create .env file with DB_HOST, DB_NAME, DB_USER, and DB_PASS');
-        }
+        // Default to SQLite if no .env file or DB_NAME not set
+        $db_name = $_ENV['DB_NAME'] ?? 'database/adilgfx.sqlite';
         
-        $this->host = $_ENV['DB_HOST'];
-        $this->db_name = $_ENV['DB_NAME'];
-        $this->username = $_ENV['DB_USER'];
-        $this->password = $_ENV['DB_PASS'];
+        // Check if using SQLite (file path) or MySQL (database name)
+        if (strpos($db_name, '.sqlite') !== false || strpos($db_name, '/') !== false || empty($_ENV['DB_HOST'])) {
+            // SQLite - use default or provided path
+            $this->db_name = $db_name;
+            $this->host = $_ENV['DB_HOST'] ?? 'localhost';
+            $this->username = $_ENV['DB_USER'] ?? 'root';
+            $this->password = $_ENV['DB_PASS'] ?? '';
+        } else {
+            // MySQL - require all credentials
+            if (empty($_ENV['DB_HOST']) || empty($_ENV['DB_NAME']) || empty($_ENV['DB_USER']) || empty($_ENV['DB_PASS'])) {
+                throw new Exception('MySQL credentials not configured. Please create .env file with DB_HOST, DB_NAME, DB_USER, and DB_PASS');
+            }
+            $this->host = $_ENV['DB_HOST'];
+            $this->db_name = $_ENV['DB_NAME'];
+            $this->username = $_ENV['DB_USER'];
+            $this->password = $_ENV['DB_PASS'];
+        }
     }
 
     public function getConnection() {

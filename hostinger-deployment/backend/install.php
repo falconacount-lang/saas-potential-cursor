@@ -72,66 +72,86 @@ try {
     }
     
     // Install database schema
-    echo "📋 Installing unified database schema...\n";
+    echo "📋 Installing database schema...\n";
     
-    // Choose schema file based on database driver
-    if ($driver === 'sqlite') {
-        $schemaFile = __DIR__ . '/database/simple_schema.sql';
-    } else {
-        $schemaFile = __DIR__ . '/database/hostinger_mysql_schema.sql';
-    }
+    // Use the complete schema file (works for both SQLite and MySQL)
+    $schemaFile = __DIR__ . '/database/complete_schema.sql';
     
     if (!file_exists($schemaFile)) {
-        throw new Exception("Unified schema file not found: $schemaFile");
+        throw new Exception("Schema file not found: $schemaFile");
     }
     
     $schema = file_get_contents($schemaFile);
     
-    // Remove comments and split by semicolon
-    $schema = preg_replace('/--.*$/m', '', $schema);
-    $queries = array_filter(array_map('trim', explode(';', $schema)));
-    
-    $tableCount = 0;
-    foreach ($queries as $query) {
-        if (empty($query) || stripos($query, 'CREATE DATABASE') !== false || stripos($query, 'USE ') !== false) {
-            continue;
-        }
-        
+    // For SQLite, execute the entire schema file
+    if ($driver === 'sqlite') {
         try {
-            $db->exec($query);
-            if (stripos($query, 'CREATE TABLE') !== false) {
-                $tableCount++;
-                preg_match('/CREATE TABLE\s+`?(\w+)`?/i', $query, $matches);
-                $tableName = $matches[1] ?? 'unknown';
-                echo "  ✅ Created table: $tableName\n";
-            }
+            $db->exec($schema);
+            echo "✅ SQLite schema executed successfully!\n\n";
         } catch (PDOException $e) {
-            if (strpos($e->getMessage(), 'already exists') === false) {
+            // If tables already exist, that's okay
+            if (strpos($e->getMessage(), 'already exists') !== false) {
+                echo "✅ Database schema already exists!\n\n";
+            } else {
                 throw $e;
             }
         }
+    } else {
+        // For MySQL, split by semicolon and execute each query
+        $queries = array_filter(array_map('trim', explode(';', $schema)));
+        $tableCount = 0;
+        
+        foreach ($queries as $query) {
+            if (empty($query) || stripos($query, 'CREATE DATABASE') !== false || stripos($query, 'USE ') !== false) {
+                continue;
+            }
+            
+            try {
+                $db->exec($query);
+                if (stripos($query, 'CREATE TABLE') !== false) {
+                    $tableCount++;
+                    preg_match('/CREATE TABLE\s+`?(\w+)`?/i', $query, $matches);
+                    $tableName = $matches[1] ?? 'unknown';
+                    echo "  ✅ Created table: $tableName\n";
+                }
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'already exists') === false) {
+                    throw $e;
+                }
+            }
+        }
+        
+        echo "✅ Database schema installed successfully! ($tableCount tables created)\n\n";
     }
-    
-    echo "✅ Database schema installed successfully! ($tableCount tables created)\n\n";
     
     skip_schema:
     
     // Check if admin user already exists
     echo "🔍 Checking for existing admin user...\n";
-    $stmt = $db->query("SELECT COUNT(*) FROM users WHERE role = 'admin'");
-    $adminCount = $stmt->fetchColumn();
-    
-    if ($adminCount > 0) {
-        echo "👤 Admin user already exists. Database setup complete.\n";
-        echo "📧 Admin login: admin@adilgfx.com\n";
-        echo "🔑 Password: admin123\n\n";
-    } else {
-        echo "✅ Unified schema with sample data installed successfully!\n\n";
+    try {
+        $stmt = $db->query("SELECT COUNT(*) FROM users WHERE role = 'admin'");
+        $adminCount = $stmt->fetchColumn();
         
-        echo "👤 Admin Account Created:\n";
-        echo "📧 Email: admin@adilgfx.com\n";
-        echo "🔑 Password: admin123\n";
-        echo "⚠️  Please change the admin password after first login!\n\n";
+        if ($adminCount > 0) {
+            echo "👤 Admin user already exists. Database setup complete.\n";
+            echo "📧 Admin login: admin@adilgfx.com\n";
+            echo "🔑 Password: admin123\n\n";
+        } else {
+            // Create admin user
+            echo "👤 Creating admin user...\n";
+            $hashedPassword = password_hash('admin123', PASSWORD_DEFAULT);
+            $stmt = $db->prepare("INSERT INTO users (name, email, password, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute(['Admin User', 'admin@adilgfx.com', $hashedPassword, 'admin', 'active', date('Y-m-d H:i:s')]);
+            
+            echo "✅ Admin user created successfully!\n\n";
+            echo "👤 Admin Account:\n";
+            echo "📧 Email: admin@adilgfx.com\n";
+            echo "🔑 Password: admin123\n";
+            echo "⚠️  Please change the admin password after first login!\n\n";
+        }
+    } catch (PDOException $e) {
+        echo "⚠️  Could not check/create admin user: " . $e->getMessage() . "\n";
+        echo "You may need to create an admin user manually through the admin panel.\n\n";
     }
     
     // Create necessary directories
