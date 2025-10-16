@@ -24,15 +24,13 @@ class Database {
     private $conn;
 
     public function __construct() {
-        // Check if using SQLite or MySQL
-        $db_name = $_ENV['DB_NAME'] ?? '';
+        // Default to SQLite if no .env file or DB_NAME not set
+        $db_name = $_ENV['DB_NAME'] ?? 'database/adilgfx.sqlite';
         
-        if (strpos($db_name, '.sqlite') !== false || strpos($db_name, '/') !== false) {
-            // SQLite - only need DB_NAME
-            if (empty($_ENV['DB_NAME'])) {
-                throw new Exception('Database path not configured. Please set DB_NAME in .env file (e.g., database/adilgfx.sqlite)');
-            }
-            $this->db_name = $_ENV['DB_NAME'];
+        // Check if using SQLite (file path) or MySQL (database name)
+        if (strpos($db_name, '.sqlite') !== false || strpos($db_name, '/') !== false || empty($_ENV['DB_HOST'])) {
+            // SQLite - use default or provided path
+            $this->db_name = $db_name;
             $this->host = $_ENV['DB_HOST'] ?? 'localhost';
             $this->username = $_ENV['DB_USER'] ?? 'root';
             $this->password = $_ENV['DB_PASS'] ?? '';
