@@ -63,7 +63,7 @@ export async function apiRequest<T = any>(
       
       // Redirect to login if on admin page
       if (window.location.pathname.startsWith('/admin')) {
-        window.location.href = '/admin/login';
+        window.location.href = '/user/login';
       }
       
       throw new ApiError('Unauthorized', 401);
